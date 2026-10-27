@@ -8,16 +8,6 @@ Systems
   oneshot_random  strong-style one-shot with a RANDOM case from the bank
   oneshot_top     the same one-shot prompt with the TOP-1 retrieved case
   framework       the single-call method (profile -> match -> branches -> score -> fuse)
-
-Steps (retrieval is done ONCE, so every LLM sees the same cases)
-  1. prepare  python run_benchmark.py prepare --cases kb_all.jsonl --queries queries.jsonl --bench bench/
-  2. run      python run_benchmark.py run --cases kb_all.jsonl --queries queries.jsonl --bench bench/ \
-                  --model-config models.json --models qwen_local gpt4o --limit 3        # trial first
-  3. export   python run_benchmark.py export --queries queries.jsonl --bench bench/
-
-`run` is resumable: finished (model, query, system) triples are skipped, failed ones are retried
-next time you run the same command. Needs empathy_rag.py and single_call_prompt.txt in the same
-folder. Python standard library only.
 """
 import argparse
 import concurrent.futures as cf
@@ -40,7 +30,15 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import empathy_rag as er  # noqa: E402
 
-SYSTEMS = ["simple", "strong", "oneshot_random", "oneshot_top", "framework"]
+SYSTEMS = [
+    "simple",
+    "strong",
+    "oneshot_random",
+    "oneshot_top",
+    "rag_top1",
+    "rag_top3",
+    "framework",
+]
 
 STRONG_SYSTEM = """You are a warm, attentive listener. A person is sharing something personal with you. Reply in 3-6 sentences of natural prose.
 - First reflect what they said and the feeling behind it in your own words, using specifics from their message (including any physical reaction they mention).
@@ -70,7 +68,20 @@ Message: {message}
 
 Write the response to the new person."""
 
+RAG_SYSTEM = """You are a warm, attentive listener. Use the provided reference situations from the knowledge base as context to inform your understanding, then respond empathetically to the new person's message.
 
+Rules:
+- Draw on the context to better understand similar situations, but respond directly and naturally to the new person.
+- Write 3-6 natural sentences.
+- Do not use bullet points, lists, or headings."""
+
+RAG_USER = """RETRIEVED CONTEXT CASES
+{context_cases}
+
+NEW PERSON MESSAGE
+Message: {message}
+
+Write the response to the new person."""
 # ---------------------------------------------------------------- helpers
 def load_queries(path, split="all", limit=None):
     qs = [json.loads(l) for l in open(path, encoding="utf-8") if l.strip()]
@@ -98,7 +109,16 @@ def parse_json(t):
                 return None
     return None
 
-
+def format_rag_context(cases):
+    formatted = []
+    for idx, case in enumerate(cases, 1):
+        formatted.append(
+            f"Case {idx}:\n"
+            f"- Situation: {case.get('situation_summary', '')}\n"
+            f"- Underlying Needs: {', '.join(case.get('underlying_need') or [])}\n"
+            f"- Topic Tags: {', '.join(case.get('topic_tags') or [])}"
+        )
+    return "\n\n".join(formatted)
 # ---------------------------------------------------------------- LLM backends
 def http_post(url, headers, body, timeout, retries=5):
     data = json.dumps(body).encode()
@@ -229,6 +249,21 @@ def do_job(cfg, q, system, ctx):
         case = ctx["by_id"][row["random" if system == "oneshot_random" else "top1"]]
         resp = gen(ONESHOT_SYSTEM, one_shot_user(case, q["text"]))
         meta = {"case_id": case["case_id"], "book": case["book"]}
+    elif system in ("rag_top1", "rag_top3"):
+        row = ctx["rows"][q["id"]]
+        # Extract top-1 or top-3 candidates
+        top_k_count = 1 if system == "rag_top1" else 3
+        cand_ids = row["candidates"][:top_k_count]
+        cases = [ctx["by_id"][cid] for cid in cand_ids]
+        
+        context_str = format_rag_context(cases)
+        user_prompt = RAG_USER.format(context_cases=context_str, message=q["text"])
+        
+        resp = gen(RAG_SYSTEM, user_prompt)
+        meta = {
+            "retrieved_case_ids": [c["case_id"] for c in cases],
+            "books": [c["book"] for c in cases]
+        }
     elif system == "framework":
         row = ctx["rows"][q["id"]]
         cands = [ctx["by_id"][cid] for cid in row["candidates"]]
@@ -381,13 +416,26 @@ def cmd_export(args):
     for (m, qid, s), r in sorted(recs.items()):
         q = qmap.get(qid, {})
         issues = r["meta"].get("issues")
-        long_rows.append({"model": m, "query_id": qid, "category": q.get("category"),
-                          "wants_advice": q.get("wants_advice"), "difficulty": q.get("difficulty"),
-                          "system": s, "words": len(r["response"].split()), "response": r["response"],
-                          "framework_issues": "; ".join(issues) if issues else "",
-                          "attempts": r["meta"].get("attempts", ""),
-                          "source_books": " | ".join(x["book"] for x in r["meta"].get("selected", []))
-                          or r["meta"].get("book", "")})
+        source_books = ""
+        if r["meta"].get("selected"):
+            source_books = " | ".join(x["book"] for x in r["meta"]["selected"])
+        elif r["meta"].get("books"):
+            source_books = " | ".join(r["meta"]["books"])
+        else:
+            source_books = r["meta"].get("book", "")
+        long_rows.append({
+                  "model": m,
+                  "query_id": qid,
+                  "category": q.get("category"),
+                  "wants_advice": q.get("wants_advice"),
+                  "difficulty": q.get("difficulty"),
+                  "system": s,
+                  "words": len(r["response"].split()),
+                  "response": r["response"],
+                  "framework_issues": "; ".join(issues) if issues else "",
+                  "attempts": r["meta"].get("attempts", ""),
+                  "source_books": source_books
+              })
     if not long_rows:
         sys.exit("no outputs found")
     with open(bench / "responses_long.csv", "w", newline="", encoding="utf-8") as f:
