@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""
-empathy_rag.py: run the whole empathetic-response procedure in ONE LLM call.
-
-  # recommended: embed-prefilter the 1300-case bank to ~30 candidates, then one call
-  python empathy_rag.py --cases work/cases.jsonl --model qwen2.5:14b \
-      --query "My boss criticised me in front of everyone and I can't stop shaking."
-
-  # just write the finished prompt (to paste into any chat UI / API)
-  python empathy_rag.py --cases work/cases.jsonl --query-file msg.txt --dump-prompt prompt.txt
-
-  # whole catalog in the prompt (only for very long-context models)
-  python empathy_rag.py ... --mode full
-
-Needs: prompt file single_call_prompt.txt next to this script. Stdlib only.
-Ollama is used for chat (/api/chat) and, in prefilter mode, embeddings (/api/embed;
-`ollama pull nomic-embed-text`).
-"""
 import argparse
 import hashlib
 import json
