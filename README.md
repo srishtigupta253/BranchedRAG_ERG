@@ -33,7 +33,7 @@ _Disclaimer: We do not publish any actual results and only give the pipeline due
 
 ### Effect of Retrieval Depth
 
-We investigate how the number of retrieved cases (\(m\)) affects retrieval quality, alignment with user needs, and response-generation latency. We evaluate four retrieval depths (\(m \in \{5, 15, 30, 45\}\)) using Mistral-7B, Llama-3.1-8B, and Phi-4-mini. Each setting is evaluated on 100 paired queries.
+We investigate how the number of retrieved cases ```m``` affects retrieval quality, alignment with user needs, and response-generation latency. We evaluate four retrieval depths ```m=[5, 15, 30, 45]``` using Mistral-7B, Llama-3.1-8B, and Phi-4-mini. Each setting is evaluated on 100 paired queries.
 
 #### Results
 
