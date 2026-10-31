@@ -29,6 +29,35 @@ Outputs can be found in bench folder.
 
 _Disclaimer: We do not publish any actual results and only give the pipeline due to copyright issues on the chosen books._
 
+## Additional Experiments
+
+### Effect of Retrieval Depth
+
+We investigate how the number of retrieved cases (\(m\)) affects retrieval quality, alignment with user needs, and response-generation latency. We evaluate four retrieval depths (\(m \in \{5, 15, 30, 45\}\)) using Mistral-7B, Llama-3.1-8B, and Phi-4-mini. Each setting is evaluated on 100 paired queries.
+
+#### Results
+
+| Model | Metric | m=5 | m=15 | m=30 | m=45 | Friedman p-value | Δ (45−5) [95% CI] |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Mistral-7B | Retrieval match | 0.547 | 0.599 | **0.613** | 0.601 | 3e-9 | +0.054 [+0.035, +0.072] |
+| | Need match | 0.755 | 0.763 | 0.750 | **0.789** | 0.009 | +0.034 [+0.007, +0.062] |
+| | Latency (s) | 29.4 | 33.6 | 38.8 | 44.3 | 7e-24 | +14.9 [+11.2, +18.6] |
+| Llama-3.1-8B | Retrieval match | 0.594 | **0.655** | 0.650 | 0.639 | 3e-4 | +0.045 [+0.018, +0.070] |
+| | Need match | 0.655 | 0.771 | 0.721 | **0.784** | 8e-9 | +0.129 [+0.087, +0.170] |
+| | Latency (s) | 19.0 | 18.7 | 23.9 | 23.6 | 9e-5 | +4.6 [+2.0, +7.3] |
+| Phi-4-mini | Retrieval match | **0.429** | 0.385 | 0.394 | 0.381 | 0.006 | −0.049 [−0.082, −0.013] |
+| | Need match | **0.604** | 0.548 | 0.555 | 0.534 | 0.002 | −0.070 [−0.108, −0.032] |
+
+*Note: Paired sample size is 100 queries per model. Friedman tests compare the four retrieval-depth conditions. Confidence intervals refer to the paired difference between m=45 and m=5. Bold indicates the best observed value within each model and metric.*
+
+#### Discussion
+
+The results indicate that the effect of retrieval depth varies across language models. Mistral-7B achieves its highest retrieval-match score at \(m=30\) (0.613), whereas Llama-3.1-8B performs best at \(m=15\) (0.655). Phi-4-mini achieves its highest retrieval-match and need-match scores at \(m=5\), with lower scores at larger retrieval depths.
+
+For need match, Mistral-7B and Llama-3.1-8B achieve their highest scores at \(m=45\) (0.789 and 0.784, respectively). However, increasing retrieval depth also introduces latency costs. For example, Mistral-7B latency increases from 29.4 seconds at \(m=5\) to 44.3 seconds at \(m=45\).
+
+Overall, these findings suggest that retrieval depth should be selected according to the generation model and the desired trade-off between response quality and computational cost. A larger retrieval pool does not consistently lead to better performance.
+
 ### Table 1. Details of major books considered in our study
 
 | Name | Author | ISBN | Windows | Cases | Avg. words/window |
